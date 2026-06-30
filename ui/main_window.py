@@ -9,11 +9,13 @@ from PySide6.QtCore import Qt, QThread, Signal, QTimer
 from PySide6.QtGui import QFont, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QFileDialog,
+    QHBoxLayout,
     QLabel,
     QMainWindow,
     QMessageBox,
     QProgressBar,
     QPushButton,
+    QVBoxLayout,
     QWidget,
 )
 
@@ -120,14 +122,19 @@ class MainWindow(QMainWindow):
         self._diagnostics_worker: Optional[DiagnosticsWorker] = None
 
         self.setWindowTitle(tr("Код Мастер"))
-        self.setFixedSize(480, 320)
-        self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowMaximizeButtonHint)
+        self.resize(800, 600)
+        self.setMinimumSize(640, 480)
+        self.setWindowFlags(
+            Qt.WindowType.WindowCloseButtonHint
+            | Qt.WindowType.WindowMinimizeButtonHint
+            | Qt.WindowType.WindowMaximizeButtonHint
+        )
 
         central = QWidget(self)
         self.setCentralWidget(central)
 
         self._create_widgets()
-        self._layout_widgets()
+        self._build_layout()
         self._connect_signals()
         self._setup_shortcuts()
         self._update_port_indicator()
@@ -147,92 +154,131 @@ class MainWindow(QMainWindow):
 
     def _create_widgets(self) -> None:
         """Создаёт все виджеты главного окна."""
-        self._update_button = QPushButton(tr("Обновить"), self)
-        self._settings_button = QPushButton(tr("Настроить"), self)
-        for button in (self._update_button, self._settings_button):
-            button.setFixedSize(130, 34)
-            button.setFont(QFont("Segoe UI", 10))
-            button.setCursor(Qt.CursorShape.PointingHandCursor)
+        font = QFont("Segoe UI", 10)
 
-        self._logs_button = QPushButton("📄 Логи", self)
-        self._logs_button.setFixedSize(80, 24)
-        self._logs_button.setFont(QFont("Segoe UI", 9))
+        self._logs_button = QPushButton("📄 " + tr("Логи"), self)
+        self._logs_button.setFixedSize(90, 28)
+        self._logs_button.setFont(font)
+        self._logs_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._logs_button.clicked.connect(self._open_logs)
 
         self._diagnostics_button = QPushButton(tr("Диагностика"), self)
-        self._diagnostics_button.setFixedSize(100, 24)
-        self._diagnostics_button.setFont(QFont("Segoe UI", 9))
+        self._diagnostics_button.setFixedSize(110, 28)
+        self._diagnostics_button.setFont(font)
         self._diagnostics_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self._diagnostics_button.clicked.connect(self._on_diagnostics_clicked)
 
+        self._update_button = QPushButton(tr("Обновить"), self)
+        self._update_button.setFixedSize(120, 28)
+        self._update_button.setFont(font)
+        self._update_button.setCursor(Qt.CursorShape.PointingHandCursor)
+
+        self._settings_button = QPushButton(tr("Настроить"), self)
+        self._settings_button.setFixedSize(120, 28)
+        self._settings_button.setFont(font)
+        self._settings_button.setCursor(Qt.CursorShape.PointingHandCursor)
+
         self._theme_button = QPushButton("☀", self)
-        self._theme_button.setFixedSize(30, 24)
-        self._theme_button.setFont(QFont("Segoe UI", 9))
+        self._theme_button.setFixedSize(36, 28)
+        self._theme_button.setFont(font)
         self._theme_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self._theme_button.setToolTip(tr("Переключить светлую/тёмную тему"))
         self._theme_button.clicked.connect(self._on_theme_clicked)
 
         self._lang_button = QPushButton("EN", self)
-        self._lang_button.setFixedSize(40, 24)
-        self._lang_button.setFont(QFont("Segoe UI", 9))
+        self._lang_button.setFixedSize(40, 28)
+        self._lang_button.setFont(font)
         self._lang_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self._lang_button.setToolTip(tr("Переключить язык"))
         self._lang_button.clicked.connect(self._on_language_clicked)
 
         self._update_check_button = QPushButton("🔄", self)
-        self._update_check_button.setFixedSize(30, 24)
-        self._update_check_button.setFont(QFont("Segoe UI", 9))
+        self._update_check_button.setFixedSize(36, 28)
+        self._update_check_button.setFont(font)
         self._update_check_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self._update_check_button.setToolTip(tr("Проверка обновлений"))
         self._update_check_button.clicked.connect(self._on_check_updates_clicked)
 
+        self._exit_button = QPushButton("❌ " + tr("Выход"), self)
+        self._exit_button.setFixedSize(90, 28)
+        self._exit_button.setFont(font)
+        self._exit_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._exit_button.clicked.connect(self.close)
+
         self._progress_bar = QProgressBar(self)
-        self._progress_bar.setFixedHeight(20)
+        self._progress_bar.setFixedHeight(24)
         self._progress_bar.setRange(0, 100)
         self._progress_bar.setValue(0)
         self._progress_bar.setVisible(False)
 
         self._status_label = QLabel(tr("Готов к работе"), self)
-        self._status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._status_label.setFont(QFont("Segoe UI", 10))
+        self._status_label.setAlignment(
+            Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft
+        )
+        self._status_label.setFont(font)
 
         self._port_indicator = QLabel("●", self)
         self._port_indicator.setFixedSize(20, 20)
-        self._port_indicator.setStyleSheet("color: #888888; font-size: 14px;")
+        self._port_indicator.setStyleSheet("color: #6C6C6C; font-size: 14px; background: transparent;")
         self._port_indicator.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self._port_label = QLabel(tr("Нет подключения"), self)
-        self._port_label.setFont(QFont("Segoe UI", 9))
+        self._port_label.setFont(font)
 
         self._heartbeat_label = QLabel("●", self)
         self._heartbeat_label.setFixedSize(20, 20)
-        self._heartbeat_label.setStyleSheet("color: #888888; font-size: 14px;")
+        self._heartbeat_label.setStyleSheet("color: #6C6C6C; font-size: 14px; background: transparent;")
         self._heartbeat_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._heartbeat_label.setToolTip("Индикатор жизни потока чтения COM-порта")
+        self._heartbeat_label.setToolTip(tr("Индикатор жизни потока чтения COM-порта"))
 
-    def _layout_widgets(self) -> None:
-        """Располагает виджеты по координатам."""
-        self._logs_button.move(10, 10)
-        self._diagnostics_button.move(100, 10)
-        self._theme_button.move(355, 10)
-        self._lang_button.move(400, 10)
-        self._update_check_button.move(445, 10)
+    def _build_layout(self) -> None:
+        """Собирает адаптивную компоновку главного окна."""
+        root = QVBoxLayout(self.centralWidget())
+        root.setSpacing(12)
+        root.setContentsMargins(16, 16, 16, 16)
 
-        self._update_button.move(480 - 130 - 50, 10)
-        self._settings_button.move(480 - 130 - 50 - 130 - 12, 10)
+        # Верхняя строка: индикатор/логи слева, управление справа
+        top_row = QHBoxLayout()
+        top_row.setSpacing(8)
 
-        self._progress_bar.setGeometry(50, 70, 380, 20)
+        left_group = QHBoxLayout()
+        left_group.setSpacing(6)
+        left_group.addWidget(self._logs_button)
+        left_group.addWidget(self._diagnostics_button)
+        left_group.addWidget(self._port_indicator)
+        left_group.addWidget(self._port_label)
+        left_group.addWidget(self._heartbeat_label)
+        left_group.addStretch()
 
-        self._port_indicator.move(10, 320 - 28)
-        self._port_label.move(32, 320 - 30)
-        self._heartbeat_label.move(450, 320 - 28)
+        right_group = QHBoxLayout()
+        right_group.setSpacing(8)
+        right_group.addWidget(self._update_button)
+        right_group.addWidget(self._settings_button)
+        right_group.addWidget(self._theme_button)
+        right_group.addWidget(self._lang_button)
+        right_group.addWidget(self._update_check_button)
 
-        self._status_label.setGeometry(0, 320 - 60, 480, 20)
+        top_row.addLayout(left_group)
+        top_row.addStretch()
+        top_row.addLayout(right_group)
+        root.addLayout(top_row)
+
+        # Центральная область — прогресс-бар и растягивающееся пространство
+        root.addWidget(self._progress_bar)
+        root.addStretch()
+
+        # Нижняя строка: статус слева, выход справа
+        bottom_row = QHBoxLayout()
+        bottom_row.setSpacing(8)
+        bottom_row.addWidget(self._status_label)
+        bottom_row.addStretch()
+        bottom_row.addWidget(self._exit_button)
+        root.addLayout(bottom_row)
 
     def _connect_signals(self) -> None:
         """Подключает сигналы кнопок и менеджера."""
         self._update_button.clicked.connect(self._on_update_clicked)
         self._settings_button.clicked.connect(self._on_settings_clicked)
-        self._logs_button.clicked.connect(self._open_logs)
         self._serial_manager.connection_changed.connect(self._update_port_indicator)
         self._serial_manager.error_occurred.connect(self._on_serial_error)
         self._serial_manager.heartbeat.connect(self._on_heartbeat)
@@ -270,11 +316,11 @@ class MainWindow(QMainWindow):
 
     def _on_heartbeat(self) -> None:
         """Обработчик heartbeat: делает индикатор зелёным."""
-        self._heartbeat_label.setStyleSheet("color: #00CC00; font-size: 14px;")
+        self._heartbeat_label.setStyleSheet("color: #6CFF8C; font-size: 14px; background: transparent;")
 
     def _reset_heartbeat_color(self) -> None:
         """Сбрасывает индикатор в серый, если heartbeat давно не приходил."""
-        self._heartbeat_label.setStyleSheet("color: #888888; font-size: 14px;")
+        self._heartbeat_label.setStyleSheet("color: #6C6C6C; font-size: 14px; background: transparent;")
 
     def _ensure_port(self) -> bool:
         """Проверяет подключение COM-порта, иначе открывает диалог выбора.
@@ -397,16 +443,15 @@ class MainWindow(QMainWindow):
 
     def _update_port_indicator(self, connected: bool = False) -> None:
         """Обновляет цвет индикатора и текст порта."""
+        base_style = "font-size: 14px; background: transparent;"
         if self._serial_manager.is_open():
-            self._port_indicator.setStyleSheet("color: #00AA00; font-size: 14px;")
+            self._port_indicator.setStyleSheet(f"color: #6CFF8C; {base_style}")
             self._port_label.setText(self._serial_manager.current_port_name())
-        else:
-            self._reset_heartbeat_color()
-        if self._config.get("port"):
-            self._port_indicator.setStyleSheet("color: #AA0000; font-size: 14px;")
+        elif self._config.get("port"):
+            self._port_indicator.setStyleSheet(f"color: #FF6C6C; {base_style}")
             self._port_label.setText(tr("Порт не открыт"))
         else:
-            self._port_indicator.setStyleSheet("color: #888888; font-size: 14px;")
+            self._port_indicator.setStyleSheet(f"color: #6C6C6C; {base_style}")
             self._port_label.setText(tr("Нет подключения"))
 
     def _on_serial_error(self, message: str) -> None:
@@ -417,8 +462,19 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event) -> None:  # noqa: N802
         """Корректно закрывает приложение и освобождает ресурсы."""
         logger.info("Закрытие главного окна")
+
+        if self._firmware_worker is not None and self._firmware_worker.isRunning():
+            self._firmware_worker.requestInterruption()
+            self._firmware_worker.wait(3000)
+        if self._diagnostics_worker is not None and self._diagnostics_worker.isRunning():
+            self._diagnostics_worker.requestInterruption()
+            self._diagnostics_worker.wait(3000)
+
         if self._settings_window is not None:
             self._settings_window.close()
+            self._settings_window = None
+
+        self._heartbeat_timer.stop()
         self._serial_manager.close_port()
         event.accept()
 

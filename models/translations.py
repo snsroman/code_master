@@ -86,6 +86,8 @@ class Translator:
                 "Последняя версия": "Latest version",
                 "Используется последняя версия": "You are using the latest version",
                 "Ошибка проверки обновлений": "Update check error",
+                "Логи": "Logs",
+                "Выход": "Exit",
             },
         }
 
