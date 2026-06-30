@@ -1,0 +1,93 @@
+"""Управление настройками приложения «Код Мастер».
+
+Настройки хранятся в формате JSON в файле config.json рядом с приложением.
+Класс Config реализован как синглтон, чтобы все части программы работали
+с одним и тем же набором параметров.
+"""
+
+import json
+import threading
+from copy import deepcopy
+from pathlib import Path
+from typing import Any
+
+
+class Config:
+    """Синглтон для хранения и автоматического сохранения настроек."""
+
+    _instance: "Config | None" = None
+    _lock: threading.Lock = threading.Lock()
+
+    DEFAULT_CONFIG: dict[str, Any] = {
+        "port": "",
+        "baudrate": 115200,
+        "emulation": False,
+        "triggers": [],
+        "gateway_rules": [],
+        "ignore_list": [],
+    }
+
+    def __new__(cls) -> "Config":
+        """Создаёт или возвращает единственный экземпляр настроек."""
+        if cls._instance is None:
+            with cls._lock:
+                if cls._instance is None:
+                    cls._instance = super().__new__(cls)
+                    cls._instance._initialized = False
+        return cls._instance
+
+    def __init__(self) -> None:
+        """Инициализирует путь к файлу конфигурации и загружает данные."""
+        if self._initialized:
+            return
+        self._file_path = Path(__file__).resolve().parent.parent / "config.json"
+        self._data = deepcopy(self.DEFAULT_CONFIG)
+        self._initialized = True
+        self.load()
+
+    def load(self) -> None:
+        """Загружает настройки из config.json, если файл существует."""
+        if self._file_path.exists():
+            try:
+                with self._file_path.open("r", encoding="utf-8") as file:
+                    loaded = json.load(file)
+                    self._data.update(loaded)
+            except (json.JSONDecodeError, OSError, TypeError) as exc:
+                print(f"Ошибка загрузки конфигурации: {exc}")
+
+    def save(self) -> None:
+        """Сохраняет текущие настройки в config.json."""
+        try:
+            with self._file_path.open("w", encoding="utf-8") as file:
+                json.dump(self._data, file, ensure_ascii=False, indent=2)
+        except OSError as exc:
+            print(f"Ошибка сохранения конфигурации: {exc}")
+
+    def get(self, key: str, default: Any = None) -> Any:
+        """Возвращает значение настройки по ключу."""
+        return self._data.get(key, default)
+
+    def set(self, key: str, value: Any) -> None:
+        """Устанавливает значение настройки и сразу сохраняет его."""
+        self._data[key] = value
+        self.save()
+
+    def set_bulk(self, values: dict[str, Any]) -> None:
+        """Обновляет несколько настроек за раз и сохраняет их."""
+        self._data.update(values)
+        self.save()
+
+    def all(self) -> dict[str, Any]:
+        """Возвращает полную копию текущих настроек."""
+        return deepcopy(self._data)
+
+    def save_to_file(self, path: str) -> None:
+        """Экспортирует текущие настройки в указанный JSON-файл."""
+        with Path(path).open("w", encoding="utf-8") as file:
+            json.dump(self._data, file, ensure_ascii=False, indent=2)
+
+    def load_from_file(self, path: str) -> None:
+        """Загружает настройки из указанного JSON-файла и сохраняет их."""
+        with Path(path).open("r", encoding="utf-8") as file:
+            self._data = json.load(file)
+        self.save()
